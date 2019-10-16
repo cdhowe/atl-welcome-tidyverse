@@ -1,0 +1,138 @@
+---
+title: "Analyzing Survey Results"
+author: "Carl Howe, RStudio"
+date: "10/8/2019"
+output: html_document
+params:
+  workshop: "Welcome to the Tidyverse"
+  filename: "atl-welcome-tidyverse.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(DT)
+
+```
+
+## Import Data 
+
+We can read in the survey data for `r params$workshop` that we just collected using the `googlesheets` package. However, because of challenges associated with the old OAUTH package on the Googlesheets API, I just downloaded the data and am reading it in locally.
+
+```{r import, echo=FALSE, message=FALSE}
+
+responses <- read_csv(params$filename)
+names(responses) <- c("timestamp", "day", "session", "overall", "content", "presenters", "recommend", "cloud", "best", "least", "left_out", "comments")
+```
+
+We now have the data in a data frame called `responses` and it has `r nrow(responses)` survey responses in it.
+
+## Tidying the Data
+
+Let's look at the data to get a sense of how it is formatted.
+
+```{r tidy, echo=FALSE, message=FALSE}
+datatable(responses)
+```
+
+
+## Overall Ratings
+
+```{r visualize, echo=FALSE}
+numeric_responses <- responses %>% 
+  filter(!is.na(session) & !is.na(day)) %>% 
+  select(day:cloud) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value") %>% 
+  mutate(short_session = str_trunc(session, width = 21))
+
+median_responses <- responses %>%
+  summarize(overall = round(median(overall, na.rm = TRUE), 1),
+            content = round(median(content, na.rm = TRUE), 1),
+            presenters = round(median(presenters, na.rm = TRUE), 1),
+            promoters = sum(recommend == 9 | recommend == 10, na.rm=TRUE),
+            detractors = sum(recommend %in% 1:6, na.rm = TRUE), 
+            recommend = round(median(recommend, na.rm = TRUE), 1),
+            cloud = round(median(cloud, na.rm = TRUE), 1),
+            n = n(),
+            nps = round(promoters / n * 100 - detractors / n * 100),
+            nps_rating = cut(nps, 
+                             breaks = c(-100, 0, 50, 75, 100), 
+                             labels = c("Dangerous", "Good", "Excellent", "World Class")))
+
+## Just keeping the numeric values.
+median_responses_long <- median_responses %>%
+  select(overall:nps) %>% 
+  pivot_longer(overall:nps, names_to = "name", values_to = "value")
+
+theme_set(theme_minimal())
+p <- ggplot(numeric_responses) +
+    geom_boxplot(aes(x = name, y = value), alpha = 0.1, 
+                 notch = TRUE, notchwidth = 0.85) +
+    geom_point(aes(x = name, y = value), 
+               position = "jitter", color = "blue", alpha = 0.2) +
+    geom_text(data=median_responses, 
+              aes(x = name, 
+                  y = as.numeric(value) + 0.5, 
+                  label = paste0("median=", value)), 
+              color = "blue") +
+    geom_label(data=median_responses, aes(label = nps_rating),
+               x = Inf, y = 0) +
+    scale_y_continuous(breaks = seq(0, 10, 2)) +
+    scale_color_brewer(palette = "Set1") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom") +
+    ggtitle("Overall Numeric Ratings", subtitle = paste0("N = ", median_responses$n ))
+print(p)
+```
+
+## Numeric Ratings By Session
+
+```{r visualize, echo=FALSE, message=FALSE, warning=FALSE}
+numeric_responses <- responses %>% 
+  filter(!is.na(session) & !is.na(day)) %>% 
+  select(session:cloud) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value") %>% 
+  mutate(short_session = str_trunc(session, width = 21))
+
+median_responses <- responses %>%
+  group_by(session) %>% 
+  summarize(overall = round(median(overall, na.rm = TRUE), 1),
+            content = round(median(content, na.rm = TRUE), 1),
+            presenters = round(median(presenters, na.rm = TRUE), 1),
+            recommend = round(median(recommend, na.rm = TRUE), 1),
+            cloud = round(median(cloud, na.rm = TRUE), 1),
+            n = n()) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value")
+
+theme_set(theme_minimal())
+p <- ggplot(numeric_responses) +
+    geom_boxplot(aes(x = name, y = value, color = session)) +
+    geom_point(aes(x = name, y = value, color = session), 
+               position = "jitter", alpha = 0.5) +
+    geom_text(data=median_responses, 
+              aes(x = name, 
+                  y = as.numeric(value) + 0.5, 
+                  label = paste0("median=", value)), 
+              color = "blue") +
+    scale_y_continuous(breaks = seq(0, 10, 2)) +
+    scale_color_brewer(palette = "Set1") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom") +
+    facet_wrap( ~ short_session)
+print(p)
+```
+
+## Modeling The Results
+
+We can understand the overall trend by fitting a linear model to our 3 data points. This is quantitatively meaningless because our times are imprecise, but the linear model gives us a feel for what's going on with Apple device ownership and where it is headed in the future.
+
+```{r model, echo=FALSE, message=FALSE}
+ggplot(apple_summary, 
+       aes(x = When,
+           y = Percent)) +
+     geom_point() +
+     scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+     labs(y = "Percent Apple Owners", x = "") +
+     geom_smooth(aes(x = as.numeric(When)), method = lm, se = FALSE)
+```
+
