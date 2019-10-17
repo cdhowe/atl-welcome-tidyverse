@@ -96,16 +96,6 @@ numeric_responses <- responses %>%
   mutate(short_session = str_trunc(session, width = 21))
 
 median_responses <- responses %>%
-  group_by(session) %>% 
-  summarize(overall = round(median(overall, na.rm = TRUE), 1),
-            content = round(median(content, na.rm = TRUE), 1),
-            presenters = round(median(presenters, na.rm = TRUE), 1),
-            recommend = round(median(recommend, na.rm = TRUE), 1),
-            cloud = round(median(cloud, na.rm = TRUE), 1),
-            n = n()) %>% 
-  pivot_longer(overall:cloud, names_to = "name", values_to = "value")
-
-median_responses <- responses %>%
   mutate(short_session = str_trunc(session, width = 21)) %>% 
   group_by(session, short_session) %>% 
   summarize(overall = round(median(overall, na.rm = TRUE), 1),
@@ -131,15 +121,16 @@ theme_set(theme_minimal())
 p <- ggplot(numeric_responses) +
     geom_boxplot(aes(x = name, y = value, color = session)) +
     geom_point(aes(x = name, y = value, color = session), 
-               position = "jitter", alpha = 0.5) +
-    geom_text(data=median_responses, 
-              aes(x = name, 
-                  y = as.numeric(value) + 0.5, 
+               position = "jitter", alpha = 0.2) +
+    geom_text(data=median_responses_long, 
+              aes(x = name,
                   label = paste0("median=", value)), 
-              color = "blue") +
-    scale_y_continuous(breaks = seq(0, 10, 2)) +
+              y = 12, size = 2.5, color = "blue") +
+    scale_y_continuous(limits = c(0,14), breaks = seq(0, 10, 2)) +
     scale_color_brewer(palette = "Set1") +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          legend.position = "bottom") +
+    guides(color = guide_legend(direction = "vertical")) +
     facet_wrap( ~ short_session)
 print(p)
 ```
