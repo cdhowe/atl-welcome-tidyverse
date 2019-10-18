@@ -1,0 +1,182 @@
+---
+title: "Analyze-survey-results-dashboard.Rmd"
+author: "Carl Howe, RStudio"
+date: "10/17/2019"
+output:
+  flexdashboard::flex_dashboard:
+    css: dashboard.css
+    logo: logo.png
+    orientation: columns
+runtime: shiny
+params:
+  welcome:  "atl-welcome-tidyverse.csv"
+  tools: "atl-building-tidy-tools.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(stringr)
+library(DT)
+
+workshop <- "Welcome to the Tidyverse"
+welcome_responses <- read_csv(params$welcome)
+names(welcome_responses) <- c("timestamp", "day", "session", "overall", "content", "presenters", "recommend", "cloud", "best", "least", "left_out", "comments")
+
+tools_responses <- read_csv(params$tools)
+names(tools_responses) <- c("timestamp", "overall", "content", "presenters", "recommend", "live_coding", "best", "least", "left_out", "comments")
+```
+
+# Welcome to the Tidyverse
+
+## Column {data-width=500}
+
+### Inputs {data-height=200}
+
+```{r welcome_inputs, echo=FALSE}
+
+workshop_names <- welcome_responses %>% 
+  select(session) %>% 
+  distinct() %>% 
+  filter(!is.na(session))
+
+workshop_selections <- rbind("Both rooms", workshop_names)
+
+selectizeInput("session", "Choose Workshop Session", 
+               choices = workshop_selections,
+               width = "400px")
+
+selectizeInput("day", "Choose Workshop Day",
+               choices = c("Both days", "1", "2"),
+               width = "200px")
+
+filtered_responses <- reactive ({
+  if (input$session == "Both rooms") {
+    selected_session_responses <- welcome_responses %>% 
+      filter(!is.na(session))
+    } else {
+     selected_session_responses <-  welcome_responses %>% 
+           filter(!is.na(session) & 
+                    input$session == session)
+    }
+  if (input$day == "Both days") {
+    day_responses <- selected_session_responses %>% 
+           filter(!is.na(day))
+  } else {
+    day_responses <- selected_session_responses %>% 
+           filter(!is.na(day) & 
+                    input$day == day)
+  }
+day_responses
+})
+
+```
+
+### Statistics
+
+```{r graph, echo=FALSE}
+
+renderPlot({
+numeric_responses <- filtered_responses() %>% 
+  filter(!is.na(session) & !is.na(day)) %>% 
+  select(day:cloud) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value") %>% 
+  mutate(short_session = str_trunc(session, width = 21))
+
+mean_responses <- filtered_responses() %>%
+  summarize(overall = round(mean(overall, na.rm = TRUE), 1),
+            content = round(mean(content, na.rm = TRUE), 1),
+            presenters = round(mean(presenters, na.rm = TRUE), 1),
+            promoters = sum(recommend == 9 | recommend == 10, na.rm=TRUE),
+            detractors = sum(recommend %in% 1:6, na.rm = TRUE), 
+            recommend = round(mean(recommend, na.rm = TRUE), 1),
+            cloud = round(mean(cloud, na.rm = TRUE), 1),
+            n = n(),
+            nps = round(promoters / n * 100 - detractors / n * 100),
+            nps_rating = cut(nps, 
+                             breaks = c(-100, 0, 50, 75, 100), 
+                             labels = c("Dangerous", "Good", "Excellent", "World Class")))
+
+## Just keeping the numeric values.
+mean_responses_long <- mean_responses %>%
+  select(overall, content, presenters, recommend, cloud) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value")
+
+theme_set(theme_minimal())
+p <- ggplot(numeric_responses) +
+    geom_boxplot(aes(x = name, y = value), fill = "blue", alpha = 0.1, 
+                 notch = TRUE, notchwidth = 0.85) +
+    geom_point(aes(x = name, y = value), 
+               position = "jitter", color = "blue", alpha = 0.2) +
+    geom_text(data=mean_responses_long, 
+              aes(x = name, 
+                  y = 2, 
+                  label = paste0("mean=", value)), 
+              color = "blue") +
+    geom_label(data=mean_responses, aes(label = paste0("Net Promoter Score = ", nps, ", Rating is ", nps_rating)),
+               x = 0.5, y = 10, hjust = 0, size=5) +
+    scale_y_continuous(breaks = seq(0, 10, 2)) +
+    scale_color_brewer(palette = "Set1") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom") +
+    ggtitle(paste0("Overall Ratings"), subtitle = paste0("N = ", mean_responses$n ))
+print(p)
+})
+```
+
+
+## Column
+
+### Liked Best {data-height=200}
+
+```{r best, echo=FALSE}
+renderDataTable ({
+  filtered_responses() %>% 
+    select(best) %>% 
+    datatable(extensions = 'Scroller', options = list(pageLength = 300, 
+                                                      deferRender = TRUE,  
+                                                      scrollY = 200, 
+                                                      lengthChange = FALSE))
+})
+```
+
+### Liked Least  {data-height=200}
+
+```{r least, echo=FALSE}
+renderDataTable ({
+  filtered_responses() %>% 
+    select(least) %>% 
+    datatable(extensions = 'Scroller', options = list(pageLength = 300, 
+                                                      deferRender = TRUE,  
+                                                      scrollY = 200, 
+                                                      lengthChange = FALSE))
+})
+```
+
+### What Was Left Out  {data-height=200}
+
+```{r left_out, echo=FALSE}
+renderDataTable ({
+  filtered_responses() %>% 
+    select(left_out) %>% 
+    datatable(extensions = 'Scroller', options = list(pageLength = 300, 
+                                                      deferRender = TRUE,  
+                                                      scrollY = 200, 
+                                                      lengthChange = FALSE))
+})
+```
+
+### Comments  {data-height=200}
+
+```{r comments, echo=FALSE}
+renderDataTable ({
+  filtered_responses() %>% 
+    select(comments) %>% 
+    datatable(extensions = 'Scroller', options = list(pageLength = 300, 
+                                                      deferRender = TRUE,  
+                                                      scrollY = 200, 
+                                                      lengthChange = FALSE))
+})
+```

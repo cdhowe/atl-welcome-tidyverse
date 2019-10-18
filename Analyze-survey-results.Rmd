@@ -14,6 +14,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(DT)
+library(flexdashboard)
 
 ```
 
@@ -47,14 +48,14 @@ numeric_responses <- responses %>%
   pivot_longer(overall:cloud, names_to = "name", values_to = "value") %>% 
   mutate(short_session = str_trunc(session, width = 21))
 
-median_responses <- responses %>%
-  summarize(overall = round(median(overall, na.rm = TRUE), 1),
-            content = round(median(content, na.rm = TRUE), 1),
-            presenters = round(median(presenters, na.rm = TRUE), 1),
+mean_responses <- responses %>%
+  summarize(overall = round(mean(overall, na.rm = TRUE), 1),
+            content = round(mean(content, na.rm = TRUE), 1),
+            presenters = round(mean(presenters, na.rm = TRUE), 1),
             promoters = sum(recommend == 9 | recommend == 10, na.rm=TRUE),
             detractors = sum(recommend %in% 1:6, na.rm = TRUE), 
-            recommend = round(median(recommend, na.rm = TRUE), 1),
-            cloud = round(median(cloud, na.rm = TRUE), 1),
+            recommend = round(mean(recommend, na.rm = TRUE), 1),
+            cloud = round(mean(cloud, na.rm = TRUE), 1),
             n = n(),
             nps = round(promoters / n * 100 - detractors / n * 100),
             nps_rating = cut(nps, 
@@ -62,49 +63,49 @@ median_responses <- responses %>%
                              labels = c("Dangerous", "Good", "Excellent", "World Class")))
 
 ## Just keeping the numeric values.
-median_responses_long <- median_responses %>%
+mean_responses_long <- mean_responses %>%
   select(overall, content, presenters, recommend, cloud) %>% 
   pivot_longer(overall:cloud, names_to = "name", values_to = "value")
 
 theme_set(theme_minimal())
 p <- ggplot(numeric_responses) +
-    geom_boxplot(aes(x = name, y = value), alpha = 0.1, 
+    geom_boxplot(aes(x = name, y = value), fill = "blue", alpha = 0.1, 
                  notch = TRUE, notchwidth = 0.85) +
     geom_point(aes(x = name, y = value), 
                position = "jitter", color = "blue", alpha = 0.2) +
-    geom_text(data=median_responses_long, 
+    geom_text(data=mean_responses_long, 
               aes(x = name, 
-                  y = as.numeric(value) + 0.5, 
-                  label = paste0("median=", value)), 
+                  y = 2, 
+                  label = paste0("mean=", value)), 
               color = "blue") +
-    geom_label(data=median_responses, aes(label = paste0("Net Promoter Score = ", nps, ", Rating is ", nps_rating)),
-               x = Inf, y = 1, hjust = 1) +
+    geom_label(data=mean_responses, aes(label = paste0("Net Promoter Score = ", nps, ", Rating is ", nps_rating)),
+               x = Inf, y = 1.5, hjust = 1) +
     scale_y_continuous(breaks = seq(0, 10, 2)) +
     scale_color_brewer(palette = "Set1") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom") +
-    ggtitle(paste0("Overall ", params$workshop, " Numeric Ratings"), subtitle = paste0("N = ", median_responses$n ))
+    ggtitle(paste0("Overall ", params$workshop, " Numeric Ratings"), subtitle = paste0("N = ", mean_responses$n ))
 print(p)
 ```
 
 ## Numeric Ratings By Session
 
-```{r visualize, echo=FALSE, message=FALSE, warning=FALSE}
+```{r visualize_by_session, echo=FALSE, message=FALSE, warning=FALSE}
 numeric_responses <- responses %>% 
   filter(!is.na(session) & !is.na(day)) %>% 
   select(session:cloud) %>% 
   pivot_longer(overall:cloud, names_to = "name", values_to = "value") %>% 
   mutate(short_session = str_trunc(session, width = 21))
 
-median_responses <- responses %>%
+mean_responses <- responses %>%
   mutate(short_session = str_trunc(session, width = 21)) %>% 
   group_by(session, short_session) %>% 
-  summarize(overall = round(median(overall, na.rm = TRUE), 1),
-            content = round(median(content, na.rm = TRUE), 1),
-            presenters = round(median(presenters, na.rm = TRUE), 1),
+  summarize(overall = round(mean(overall, na.rm = TRUE), 1),
+            content = round(mean(content, na.rm = TRUE), 1),
+            presenters = round(mean(presenters, na.rm = TRUE), 1),
             promoters = sum(recommend == 9 | recommend == 10, na.rm=TRUE),
             detractors = sum(recommend %in% 1:6, na.rm = TRUE), 
-            recommend = round(median(recommend, na.rm = TRUE), 1),
-            cloud = round(median(cloud, na.rm = TRUE), 1),
+            recommend = round(mean(recommend, na.rm = TRUE), 1),
+            cloud = round(mean(cloud, na.rm = TRUE), 1),
             n = n(),
             nps = round(promoters / n * 100 - detractors / n * 100),
             nps_rating = cut(nps, 
@@ -112,40 +113,80 @@ median_responses <- responses %>%
                              labels = c("Dangerous", "Good", "Excellent", "World Class")))
 
 ## Just keeping the numeric values.
-median_responses_long <- median_responses %>%
+mean_responses_long <- mean_responses %>%
   filter(!is.na(session)) %>% 
   select(session, short_session, overall, content, presenters, recommend, cloud) %>% 
   pivot_longer(overall:cloud, names_to = "name", values_to = "value")
 
 theme_set(theme_minimal())
-p <- ggplot(numeric_responses) +
-    geom_boxplot(aes(x = name, y = value, color = session)) +
+ggplot(numeric_responses) +
+    geom_boxplot(aes(x = name, y = value, color = session, fill = session),
+                 alpha = 0.1, notch = TRUE, notchwidth = 0.85) +
     geom_point(aes(x = name, y = value, color = session), 
                position = "jitter", alpha = 0.2) +
-    geom_text(data=median_responses_long, 
+    geom_text(data=mean_responses_long, 
               aes(x = name,
-                  label = paste0("median=", value)), 
-              y = 12, size = 2.5, color = "blue") +
-    scale_y_continuous(limits = c(0,14), breaks = seq(0, 10, 2)) +
+                  label = paste0("mean=", value)), 
+              y = 1.5, size = 2.5, color = "blue") +
+    scale_y_continuous(limits = c(0,10), breaks = seq(0, 10, 2)) +
     scale_color_brewer(palette = "Set1") +
+    scale_fill_brewer(palette = "Set1") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
           legend.position = "bottom") +
-    guides(color = guide_legend(direction = "vertical")) +
+    guides(color = guide_legend(direction = "vertical"),
+           fill = guide_legend(direction = "vertical")) +
     facet_wrap( ~ short_session)
-print(p)
 ```
 
-## Modeling The Results
+## Numeric Ratings By Day
 
-We can understand the overall trend by fitting a linear model to our 3 data points. This is quantitatively meaningless because our times are imprecise, but the linear model gives us a feel for what's going on with Apple device ownership and where it is headed in the future.
+```{r visualize_by_day, echo=FALSE, message=FALSE, warning=FALSE}
+numeric_responses <- responses %>% 
+  filter(!is.na(session) & !is.na(day)) %>%
+  select(day, overall, content, presenters, recommend, cloud) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value") %>% 
+  mutate(short_day = paste0("Day ",str_trunc(day, width = 21)))
 
-```{r model, echo=FALSE, message=FALSE}
-ggplot(apple_summary, 
-       aes(x = When,
-           y = Percent)) +
-     geom_point() +
-     scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
-     labs(y = "Percent Apple Owners", x = "") +
-     geom_smooth(aes(x = as.numeric(When)), method = lm, se = FALSE)
+mean_responses <- responses %>%
+  mutate(short_day = paste0("Day ",str_trunc(day, width = 21))) %>% 
+  group_by(day, short_day) %>% 
+  summarize(overall = round(mean(overall, na.rm = TRUE), 1),
+            content = round(mean(content, na.rm = TRUE), 1),
+            presenters = round(mean(presenters, na.rm = TRUE), 1),
+            promoters = sum(recommend == 9 | recommend == 10, na.rm=TRUE),
+            detractors = sum(recommend %in% 1:6, na.rm = TRUE), 
+            recommend = round(mean(recommend, na.rm = TRUE), 1),
+            cloud = round(mean(cloud, na.rm = TRUE), 1),
+            n = n(),
+            nps = round(promoters / n * 100 - detractors / n * 100),
+            nps_rating = cut(nps, 
+                             breaks = c(-100, 0, 50, 75, 100), 
+                             labels = c("Dangerous", "Good", "Excellent", "World Class")))
+
+## Just keeping the numeric values.
+mean_responses_long <- mean_responses %>%
+  filter(!is.na(day)) %>% 
+  select(day, overall, content, presenters, recommend, cloud) %>% 
+  pivot_longer(overall:cloud, names_to = "name", values_to = "value")
+
+theme_set(theme_minimal())
+ggplot(numeric_responses) +
+    geom_boxplot(aes(x = name, y = value, color = short_day, fill = short_day),
+                 alpha = 0.1, notch = TRUE, notchwidth = 0.85) +
+    geom_point(aes(x = name, y = value, color = short_day), 
+               position = "jitter", alpha = 0.2) +
+    geom_text(data=mean_responses_long, 
+              aes(x = name, label = paste0("mean=", value)), 
+              y = 1.5, size = 2.5, color = "blue") +
+    scale_y_continuous(limits = c(0,10), breaks = seq(0, 10, 2)) +
+    scale_color_brewer(palette = "Set2") +
+    scale_fill_brewer(palette = "Set2") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          legend.position = "bottom") +
+    guides(color = guide_legend(direction = "vertical"),
+           fill = guide_legend(direction = "vertical")) +
+    facet_wrap( ~ short_day)
 ```
+
+
 
